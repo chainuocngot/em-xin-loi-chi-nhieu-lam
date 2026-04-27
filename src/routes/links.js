@@ -202,7 +202,9 @@ router.post("/whitelist-ips", async (req, res, next) => {
       })
     }
 
-    const existing = await WhitelistIp.findOne({ ipAddress: normalizedIp }).lean()
+    const existing = await WhitelistIp.findOne({
+      ipAddress: normalizedIp,
+    }).lean()
     if (existing) {
       return res.status(409).json({ message: "IP address already whitelisted" })
     }
