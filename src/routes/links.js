@@ -1,7 +1,9 @@
 const express = require("express")
 const crypto = require("crypto")
+const net = require("net")
 const Link = require("../models/link")
 const ClickEvent = require("../models/clickEvent")
+const WhitelistIp = require("../models/whitelistIp")
 
 const router = express.Router()
 
@@ -30,6 +32,18 @@ function isValidUrl(value) {
 function buildWrappedUrl(slug) {
   const base = process.env.BASE_TRACKING_URL || ""
   return `${base.replace(/\/$/, "")}/r/${slug}`
+}
+
+function normalizeIpAddress(ipAddress) {
+  if (!ipAddress) {
+    return ""
+  }
+
+  if (ipAddress.startsWith("::ffff:")) {
+    return ipAddress.slice(7)
+  }
+
+  return ipAddress.toLowerCase()
 }
 
 router.post("/links", async (req, res, next) => {
@@ -132,6 +146,95 @@ router.get("/links/:id/events", async (req, res, next) => {
         userAgent: event.userAgent,
         referer: event.referer,
       })),
+    })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+router.delete("/links/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const link = await Link.findById(id).lean()
+
+    if (!link) {
+      return res.status(404).json({ message: "Link not found" })
+    }
+
+    await Promise.all([
+      Link.deleteOne({ _id: id }),
+      ClickEvent.deleteMany({ linkId: id }),
+    ])
+
+    return res.json({
+      message: "Link deleted successfully",
+      id,
+    })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+router.get("/whitelist-ips", async (req, res, next) => {
+  try {
+    const items = await WhitelistIp.find().sort({ createdAt: -1 }).lean()
+    return res.json(
+      items.map((item) => ({
+        id: item._id,
+        ipAddress: item.ipAddress,
+        note: item.note,
+        createdAt: item.createdAt,
+      })),
+    )
+  } catch (error) {
+    return next(error)
+  }
+})
+
+router.post("/whitelist-ips", async (req, res, next) => {
+  try {
+    const { ipAddress, note } = req.body
+    const normalizedIp = normalizeIpAddress(String(ipAddress || "").trim())
+
+    if (!normalizedIp || net.isIP(normalizedIp) === 0) {
+      return res.status(400).json({
+        message: "ipAddress must be a valid IPv4/IPv6 address",
+      })
+    }
+
+    const existing = await WhitelistIp.findOne({ ipAddress: normalizedIp }).lean()
+    if (existing) {
+      return res.status(409).json({ message: "IP address already whitelisted" })
+    }
+
+    const created = await WhitelistIp.create({
+      ipAddress: normalizedIp,
+      note: String(note || "").trim(),
+    })
+
+    return res.status(201).json({
+      id: created._id,
+      ipAddress: created.ipAddress,
+      note: created.note,
+      createdAt: created.createdAt,
+    })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+router.delete("/whitelist-ips/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const result = await WhitelistIp.deleteOne({ _id: id })
+
+    if (!result.deletedCount) {
+      return res.status(404).json({ message: "Whitelist IP not found" })
+    }
+
+    return res.json({
+      message: "Whitelist IP deleted successfully",
+      id,
     })
   } catch (error) {
     return next(error)
