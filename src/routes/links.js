@@ -152,6 +152,73 @@ router.get("/links/:id/events", async (req, res, next) => {
   }
 })
 
+router.put("/links/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { name, targetUrl, slug } = req.body
+
+    const link = await Link.findById(id)
+    if (!link) {
+      return res.status(404).json({ message: "Link not found" })
+    }
+
+    const nextName = String(name ?? link.name).trim()
+    const nextTargetUrl = String(targetUrl ?? link.targetUrl).trim()
+    const rawSlug =
+      typeof slug === "string" ? slug.trim().toLowerCase() : String(link.slug)
+    const nextSlug = rawSlug || String(link.slug)
+
+    if (!nextName || !nextTargetUrl) {
+      return res.status(400).json({
+        message: "name and targetUrl are required",
+      })
+    }
+
+    if (!isValidUrl(nextTargetUrl)) {
+      return res.status(400).json({
+        message: "targetUrl must be a valid http/https URL",
+      })
+    }
+
+    if (!VALID_SLUG_REGEX.test(nextSlug)) {
+      return res.status(400).json({
+        message: "slug must match [a-z0-9-] with length 4 to 64",
+      })
+    }
+
+    if (nextSlug !== link.slug) {
+      const existing = await Link.findOne({
+        _id: { $ne: id },
+        slug: nextSlug,
+      }).lean()
+
+      if (existing) {
+        return res.status(409).json({
+          message: "slug already exists",
+        })
+      }
+    }
+
+    link.name = nextName
+    link.targetUrl = nextTargetUrl
+    link.slug = nextSlug
+    await link.save()
+
+    return res.json({
+      id: link._id,
+      name: link.name,
+      targetUrl: link.targetUrl,
+      slug: link.slug,
+      clickCount: link.clickCount,
+      lastClickedAt: link.lastClickedAt,
+      createdAt: link.createdAt,
+      wrappedUrl: buildWrappedUrl(link.slug),
+    })
+  } catch (error) {
+    return next(error)
+  }
+})
+
 router.delete("/links/:id", async (req, res, next) => {
   try {
     const { id } = req.params

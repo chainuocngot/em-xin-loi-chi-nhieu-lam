@@ -61,9 +61,11 @@ router.get("/r/:slug", async (req, res, next) => {
       },
     )
 
-    sendDiscordClickNotification({ link, event }).catch((error) => {
+    try {
+      await sendDiscordClickNotification({ link, event })
+    } catch (error) {
       console.error("Failed to send Discord notification:", error.message)
-    })
+    }
 
     return res.redirect(302, link.targetUrl)
   } catch (error) {
