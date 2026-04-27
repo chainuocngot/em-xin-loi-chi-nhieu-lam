@@ -1,12 +1,22 @@
 const express = require("express")
-const { customAlphabet } = require("nanoid")
+const crypto = require("crypto")
 const Link = require("../models/link")
 const ClickEvent = require("../models/clickEvent")
 
 const router = express.Router()
 
 const VALID_SLUG_REGEX = /^[a-z0-9-]{4,64}$/
-const generateSlug = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 8)
+function generateSlug(length = 8) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+  const bytes = crypto.randomBytes(length)
+
+  let slug = ""
+  for (let index = 0; index < length; index += 1) {
+    slug += alphabet[bytes[index] % alphabet.length]
+  }
+
+  return slug
+}
 
 function isValidUrl(value) {
   try {
